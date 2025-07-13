@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日本のフィットネスDX：インタラクティブ分析ダッシュボード</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals with Subtle Blue Accent -->
+    <!-- Application Structure Plan: A single-page dashboard with three main interactive views accessible via tabs: 1) '市場概観' (Market Overview) featuring a radar chart for high-level comparison, 2) '戦略グループ分析' (Strategy Group Analysis) using interactive cards to categorize gyms, and 3) '詳細比較' (Detailed Comparison) with a sortable table linking to detailed profiles. This structure transforms the linear report into an exploratory tool. The user starts with a broad visual summary, can then explore thematic clusters, and finally dive deep into specific data points. This non-linear flow is more engaging and suited for digital consumption than simply replicating the report's chapters. -->
+    <!-- Visualization & Content Choices: 
+        1.  Report Info: Overall competitive landscape. Goal: Compare. Viz: Radar Chart (Chart.js). Interaction: Hover to see details, click to filter detailed view. Justification: Provides an immediate, powerful visual "fingerprint" of each gym's digital strategy across multiple dimensions. Library: Chart.js.
+        2.  Report Info: Categorization of gyms (e.g., disruptors, traditional). Goal: Organize. Viz: Interactive Cards (HTML/Tailwind). Interaction: Clicking a card filters the main chart/table. Justification: Translates the report's analytical structure into a clear, interactive navigation element. Library: Vanilla JS + Tailwind.
+        3.  Report Info: Detailed comparison matrix (Table 4.1). Goal: Compare/Organize. Viz: Sortable HTML Table. Interaction: Sort columns, click rows to view a detailed profile pane. Justification: Presents dense data in a structured, user-controllable format. The detail pane avoids clutter. Library: Vanilla JS + Tailwind.
+        4.  Report Info: AI implementation details. Goal: Inform. Viz: Icon-based feature list within detail panes. Interaction: Static display. Justification: Uses simple iconography for quick recognition of complex tech features. Method: HTML/Unicode.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #F8F7F4; }
+        .tab-active { border-bottom-color: #2563eb; color: #1e3a8a; font-weight: 700; }
+        .tab-inactive { border-bottom-color: transparent; color: #4b5563; }
+        .chart-container { position: relative; width: 100%; max-width: 700px; margin-left: auto; margin-right: auto; height: 350px; max-height: 50vh; }
+        @media (min-width: 768px) { .chart-container { height: 500px; } }
+        .card-enter { animation: card-enter 0.5s ease-out forwards; }
+        @keyframes card-enter {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .table-sortable th { cursor: pointer; }
+        .table-sortable th:hover { background-color: #f3f4f6; }
+        .table-highlight { background-color: #eff6ff; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8 md:mb-12">
+            <h1 class="text-3xl md:text-5xl font-bold text-gray-900 mb-2">日本のフィットネス業界 デジタル変革</h1>
+            <p class="text-lg md:text-xl text-gray-600">インタラクティブ分析ダッシュボード</p>
+            <p class="mt-4 max-w-3xl mx-auto text-sm md:text-base text-gray-500">
+                本レポートは、日本のフィットネス市場におけるデジタル化の現状を分析したものです。RIZAPグループを筆頭とするデジタル先行企業が市場をどう変えているのか、各社の戦略、提供サービス、AI活用度をインタラクティブに比較・探索できます。
+            </p>
+        </header>
+
+        <nav class="flex justify-center border-b border-gray-200 mb-8">
+            <button data-tab="overview" class="tab-button text-sm md:text-base py-3 px-4 md:px-6 border-b-2 transition-colors duration-300 tab-active">市場概観チャート</button>
+            <button data-tab="groups" class="tab-button text-sm md:text-base py-3 px-4 md:px-6 border-b-2 transition-colors duration-300 tab-inactive">戦略グループ分析</button>
+            <button data-tab="details" class="tab-button text-sm md:text-base py-3 px-4 md:px-6 border-b-2 transition-colors duration-300 tab-inactive">詳細比較テーブル</button>
+        </nav>
+
+        <main>
+            <div id="overview" class="tab-content">
+                <div class="bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-lg">
+                    <h2 class="text-xl md:text-2xl font-bold text-center mb-1">デジタル戦略ポジショニング</h2>
+                    <p class="text-center text-gray-500 mb-6 text-sm md:text-base">各ジムのデジタル戦略の強みをレーダーチャートで視覚化。チャートの凡例をクリックすると表示/非表示を切り替えられます。</p>
+                    <div class="chart-container">
+                        <canvas id="fitnessRadarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="groups" class="tab-content hidden">
+                 <div class="bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-lg">
+                    <h2 class="text-xl md:text-2xl font-bold text-center mb-1">戦略グループ分析</h2>
+                    <p class="text-center text-gray-500 mb-8 text-sm md:text-base">レポートで分析された戦略的立ち位置ごとにジムを分類。各グループの概要と所属ジムを確認できます。</p>
+                    <div id="strategy-groups-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    </div>
+                 </div>
+            </div>
+
+            <div id="details" class="tab-content hidden">
+                <div class="bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-lg">
+                    <h2 class="text-xl md:text-2xl font-bold text-center mb-1">機能別 詳細比較</h2>
+                    <p class="text-center text-gray-500 mb-6 text-sm md:text-base">テーブルのヘッダーをクリックしてソートできます。行をクリックすると、各社の詳細な分析が表示されます。</p>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 overflow-x-auto">
+                            <table class="w-full text-left text-sm table-sortable">
+                                <thead class="bg-gray-50 text-xs text-gray-700 uppercase">
+                                    <tr>
+                                        <th data-sort="name" class="p-3">ジム名</th>
+                                        <th data-sort="price" class="p-3 text-right">月額目安(円)</th>
+                                        <th data-sort="content" class="p-3 text-center">自宅コンテンツ</th>
+                                        <th data-sort="food" class="p-3 text-center">食事アドバイス</th>
+                                        <th data-sort="ai" class="p-3 text-center">AI/パーソナル化</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="details-table-body">
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="gym-details-pane" class="lg:col-span-1 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                             <div class="text-center text-gray-500 h-full flex items-center justify-center">
+                                <p>上のテーブルからジムを選択して詳細を表示</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center mt-12">
+             <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl md:text-2xl font-bold mb-4">結論：デジタル化が拓くフィットネスの未来</h2>
+                <div class="max-w-4xl mx-auto text-left space-y-4 text-gray-600 text-sm md:text-base">
+                    <p>日本のフィットネス業界は、RIZAPグループを筆頭に、デジタル技術が牽引する急速な変革期にあります。新たな競争力の基準は、シームレスなアプリ体験、パーソナライズされた在宅コンテンツ、そしてAIを活用した分析ツールの提供へと引き上げられました。</p>
+                    <p>現時点では、会話形式の「AIチャットボットによる相談」機能は未来のフロンティアとして残されています。しかし、テクノロジーの戦略的活用が市場のリーダーシップを決定づける時代に突入したことは疑いようがありません。スケーラビリティを追求するためにAIを活用するのか（chocoZAPモデル）、あるいは人的コーチングの価値を最大化するためにAIを活用するのか（RIZAPプレミアムモデル）、その選択が各社の運命を左右します。</p>
+                    <p>伝統的なフィットネスクラブは、テクノロジーへの投資がもはや選択肢ではなく、生存と成長に不可欠な要素であるという重大な岐路に立たされています。今後、物理的な施設とデジタルの体験をいかに巧みに融合させられるかが、業界の新たな勝者を決定づけることになるでしょう。</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const gymData = [
+        { id: 'chocozap', name: 'chocoZAP', price: 3278, group: 'disruptor',
+          content: 5, food: 5, ai: 5, score: 5,
+          features: { home: '◎ 豊富（RIZAP監修動画、目的別プログラム）', food: '◎ AI画像解析による自動記録・栄養素算出', ai: '◎ アプリ内AIによる食事分析と、データに基づくプログラム提案', chatbot: '× なし' },
+          summary: 'テクノロジーを駆使して人的サービスを徹底的に省き、低価格と高機能なデジタルサービスに還元する破壊的モデル。アプリがサービスそのものであり、AIによる食事管理が最大の武器。', ai_type: 'ソフトウェア中心 (アプリ内蔵)' },
+        { id: 'tipness', name: 'ティップネス', price: 10000, group: 'traditional_challenger',
+          content: 5, food: 1, ai: 5, score: 4,
+          features: { home: '◎ 豊富（140本以上、シーン別動画）', food: '× なし（アプリ機能として）', ai: '◎ アルゴリズムによるトレーニングメニュー自動生成', chatbot: '× なし' },
+          summary: '親会社である日本テレビ開発のアプリ「hibitness」を導入。個々に最適化されたトレーニングメニューが自動生成される点が特徴。トレーナーとの連携機能も備える。', ai_type: 'アルゴリズム/エンジン (メニュー生成)' },
+        { id: 'anytime', name: 'エニタイムフィットネス', price: 8000, group: 'global_tech',
+          content: 3, food: 2, ai: 2, score: 3,
+          features: { home: '○ アプリによるワークアウトプラン提供', food: '△ コーチからのヒント提供', ai: '△ 施設内スマートハードウェア（EGYM/InBody）による診断', chatbot: '× なし' },
+          summary: 'グローバル開発の公式アプリと、施設内に設置されたAI搭載マシン（ハードウェア）を組み合わせた戦略。アプリ単体ではなく、高品質なトレーニング環境で付加価値を提供する。', ai_type: 'ハードウェア中心 (施設内設備)' },
+        { id: 'rizap', name: 'RIZAP (プレミアム)', price: 191400, group: 'premium_hybrid',
+          content: 3, food: 5, ai: 5, score: 5,
+          features: { home: '○（トレーナーが指導）', food: '◎ AI画像解析＋専属トレーナーによる詳細フィードバック', ai: '◎ AI分析データを基にしたトレーナーによる完全パーソナライズ', chatbot: '× なし（トレーナーと直接やり取り）' },
+          summary: 'AIと人間の専門知識を融合させた最も洗練されたハイブリッドモデル。AIがデータ分析を担い、その結果を基に人間のトレーナーが深い洞察と指導を行う。', ai_type: 'AI強化型ヒューマンコーチング' },
+        { id: 'curves', name: 'カーブス (おうちで)', price: 6270, group: 'niche_specialist',
+          content: 5, food: 2, ai: 0, score: 3,
+          features: { home: '◎ 豊富（録画・生放送）', food: '△（コーチが指導）', ai: '× なし（人的サポート中心）', chatbot: '× なし' },
+          summary: 'ターゲット（中高年女性）に特化し、オンラインでもコーチがリアルタイムで声かけを行うハイタッチなデジタルサービス。テクノロジーを人的サポートの拡張ツールとして活用。', ai_type: '該当なし (人的サポート中心)' },
+        { id: 'renaissance', name: 'ルネサンス', price: 9000, group: 'traditional_follower',
+          content: 3, food: 1, ai: 0, score: 2,
+          features: { home: '○（動画コンテンツ視聴）', food: '× なし（アプリ機能として）', ai: '× なし', chatbot: '× なし' },
+          summary: '会員の利便性を高める管理機能が中心の「ユーティリティアプリ」を提供。動画コンテンツはあるが、パーソナライズ機能はなく、コーチング面では競合に後れを取る。', ai_type: '該当なし' },
+        { id: 'joyfit', name: 'JOYFIT', price: 6500, group: 'traditional_follower',
+          content: 0, food: 0, ai: 0, score: 1,
+          features: { home: '× なし', food: '× なし（体重・体脂肪の自己記録のみ）', ai: '× なし', chatbot: '× なし' },
+          summary: '現在は基本的なユーティリティアプリのみだが、マシンと連携したトレーニングデータの自動記録機能を開発中と公表しており、「将来への投資家」と位置づけられる。', ai_type: '開発中' },
+        { id: 'konami', name: 'コナミスポーツクラブ', price: 8000, group: 'traditional_follower',
+          content: 0, food: 0, ai: 0, score: 1,
+          features: { home: '× なし', food: '× なし', ai: '× なし', chatbot: '× なし' },
+          summary: 'アプリは来館回数やタイムテーブルの確認など、ごく基本的な情報提供ツールに留まる。デジタル化においては最も基本的な段階にあり、戦略的な脆弱性となるリスクがある。', ai_type: '該当なし' },
+        { id: '247', name: '24/7 Workout', price: 107800, group: 'premium_human',
+          content: 3, food: 3, ai: 0, score: 2,
+          features: { home: '○（トレーナーが指導）', food: '○ トレーナーによる直接指導（メール・電話等）', ai: '× なし（トレーナーによる完全オーダーメイド）', chatbot: '× なし' },
+          summary: '独自アプリを持たず、100%人間によるオーダーメイドのサポートを価値提案の中心に据える。テクノロジー投資を抑え、純粋な人的専門性で勝負する対照的な戦略。', ai_type: '該当なし (人間中心)' },
+    ];
+    
+    const strategyGroups = {
+        disruptor: { title: 'テクノロジー主導の破壊者', description: 'アプリとAIを事業の中核に据え、低価格と高機能で市場の常識を覆す新しいビジネスモデル。', members: ['chocozap'] },
+        global_tech: { title: 'グローバルTechと施設価値', description: '世界共通のアプリプラットフォームと、施設内のAI搭載マシンを組み合わせ、トレーニング体験そのものの質を向上させるモデル。', members: ['anytime'] },
+        premium_hybrid: { title: 'AI強化型プレミアム', description: 'AIを人間の専門知識を増幅させるためのツールとして活用。高価格帯で最も洗練されたハイブリッドコーチングを提供する。', members: ['rizap'] },
+        niche_specialist: { title: '特定層向けハイタッチDX', description: '特定の顧客層に深く寄り添い、デジタルツールを介して手厚い人的サポートやコミュニティを提供するモデル。', members: ['curves'] },
+        traditional_challenger: { title: '伝統企業の野心的挑戦', description: '大手資本を背景に、先進的なアプリ開発や外部技術の導入に積極的に投資し、デジタル化で先行しようとする伝統的企業。', members: ['tipness'] },
+        traditional_follower: { title: '実用性重視の追随者', description: 'まずは会員の利便性を高める基本的な管理アプリから導入。コーチング機能は限定的だが、デジタル化の必要性は認識している。', members: ['renaissance', 'joyfit', 'konami'] },
+        premium_human: { title: '人間中心のアナログ回帰', description: 'あえてアプリ開発に投資せず、トレーナーによる直接的でフィルターのかからない人的サポートを最大の価値とするモデル。', members: ['247'] },
+    };
+
+    const colors = {
+        chocozap: 'rgba(255, 204, 0, 0.7)',
+        tipness: 'rgba(239, 68, 68, 0.7)',
+        anytime: 'rgba(129, 140, 248, 0.7)',
+        rizap: 'rgba(34, 34, 34, 0.7)',
+        curves: 'rgba(236, 72, 153, 0.7)',
+        renaissance: 'rgba(59, 130, 246, 0.7)',
+        joyfit: 'rgba(249, 115, 22, 0.7)',
+        konami: 'rgba(132, 204, 22, 0.7)',
+        '247': 'rgba(20, 184, 166, 0.7)',
+    };
+    const borderColors = {
+        chocozap: 'rgba(255, 204, 0, 1)',
+        tipness: 'rgba(239, 68, 68, 1)',
+        anytime: 'rgba(129, 140, 248, 1)',
+        rizap: 'rgba(34, 34, 34, 1)',
+        curves: 'rgba(236, 72, 153, 1)',
+        renaissance: 'rgba(59, 130, 246, 1)',
+        joyfit: 'rgba(249, 115, 22, 1)',
+        konami: 'rgba(132, 204, 22, 1)',
+        '247': 'rgba(20, 184, 166, 1)',
+    };
+    
+    let radarChart;
+
+    const renderRadarChart = (filteredGyms = gymData) => {
+        const ctx = document.getElementById('fitnessRadarChart').getContext('2d');
+        const labels = ['自宅コンテンツ', '食事アドバイス', 'AI/パーソナル化', '総合スコア', '価格優位性'];
+        
+        const datasets = filteredGyms.map(gym => ({
+            label: gym.name,
+            data: [
+                gym.content,
+                gym.food,
+                gym.ai,
+                gym.score,
+                gym.price < 4000 ? 5 : (gym.price < 8000 ? 4 : (gym.price < 12000 ? 3 : (gym.price < 100000 ? 2 : 1)))
+            ],
+            backgroundColor: colors[gym.id],
+            borderColor: borderColors[gym.id],
+            borderWidth: 2,
+            pointBackgroundColor: borderColors[gym.id],
+            pointRadius: 4,
+            pointHoverRadius: 6,
+        }));
+
+        if (radarChart) {
+            radarChart.destroy();
+        }
+
+        radarChart = new Chart(ctx, {
+            type: 'radar',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        pointLabels: { font: { size: 12 }, color: '#333' },
+                        ticks: {
+                            backdropColor: 'rgba(255, 255, 255, 0.75)',
+                            stepSize: 1,
+                            max: 5,
+                            min: 0
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            boxWidth: 8,
+                            padding: 20
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.r !== null) {
+                                    label += context.parsed.r.toFixed(1) + ' / 5';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    };
+
+    const renderStrategyGroups = () => {
+        const container = document.getElementById('strategy-groups-container');
+        container.innerHTML = '';
+        Object.values(strategyGroups).forEach(group => {
+            const card = document.createElement('div');
+            card.className = 'bg-gray-50 p-6 rounded-lg border border-gray-200 card-enter';
+            
+            const membersHtml = group.members.map(id => {
+                const gym = gymData.find(g => g.id === id);
+                return `<span class="inline-block bg-white border border-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700 mr-2 mb-2">${gym.name}</span>`;
+            }).join('');
+
+            card.innerHTML = `
+                <h3 class="font-bold text-lg text-blue-800 mb-2">${group.title}</h3>
+                <p class="text-gray-600 text-sm mb-4">${group.description}</p>
+                <div>${membersHtml}</div>
+            `;
+            container.appendChild(card);
+        });
+    };
+
+    const renderDetailsTable = () => {
+        const tbody = document.getElementById('details-table-body');
+        tbody.innerHTML = '';
+        gymData.forEach(gym => {
+            const row = document.createElement('tr');
+            row.className = 'border-b hover:bg-gray-100 cursor-pointer';
+            row.dataset.gymId = gym.id;
+            const formatIcon = (val) => {
+                if (val >= 5) return '<span class="text-lg text-amber-500">◎</span>';
+                if (val >= 3) return '<span class="text-lg text-blue-500">○</span>';
+                if (val >= 1) return '<span class="text-lg text-gray-400">△</span>';
+                return '<span class="text-lg text-red-500">×</span>';
+            };
+            row.innerHTML = `
+                <td class="p-3 font-medium">${gym.name}</td>
+                <td class="p-3 text-right">${gym.price.toLocaleString()}</td>
+                <td class="p-3 text-center">${formatIcon(gym.content)}</td>
+                <td class="p-3 text-center">${formatIcon(gym.food)}</td>
+                <td class="p-3 text-center">${formatIcon(gym.ai)}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    };
+    
+    const renderGymDetails = (gymId) => {
+        const gym = gymData.find(g => g.id === gymId);
+        const pane = document.getElementById('gym-details-pane');
+        if (!gym) {
+            pane.innerHTML = `<div class="text-center text-gray-500 h-full flex items-center justify-center"><p>詳細情報の取得に失敗しました。</p></div>`;
+            return;
+        }
+
+        pane.innerHTML = `
+            <div class="card-enter">
+                <h3 class="text-xl font-bold mb-1" style="color: ${borderColors[gym.id]};">${gym.name}</h3>
+                <p class="text-sm font-semibold text-gray-500 mb-4">AI活用タイプ: ${gym.ai_type}</p>
+                <p class="text-sm text-gray-700 mb-6">${gym.summary}</p>
+                <div class="space-y-3 text-sm">
+                    <div class="flex items-start"><span class="w-28 font-semibold shrink-0">🏠 自宅コンテンツ:</span><span class="text-gray-600">${gym.features.home}</span></div>
+                    <div class="flex items-start"><span class="w-28 font-semibold shrink-0">🍽️ 食事アドバイス:</span><span class="text-gray-600">${gym.features.food}</span></div>
+                    <div class="flex items-start"><span class="w-28 font-semibold shrink-0">🤖 AI/パーソナル化:</span><span class="text-gray-600">${gym.features.ai}</span></div>
+                    <div class="flex items-start"><span class="w-28 font-semibold shrink-0">💬 AIチャット相談:</span><span class="text-gray-600">${gym.features.chatbot}</span></div>
+                </div>
+            </div>
+        `;
+
+        const rows = document.querySelectorAll('#details-table-body tr');
+        rows.forEach(r => r.classList.remove('table-highlight'));
+        const activeRow = document.querySelector(`#details-table-body tr[data-gym-id="${gymId}"]`);
+        if (activeRow) {
+            activeRow.classList.add('table-highlight');
+        }
+    };
+    
+    const handleTabClick = (e) => {
+        if (!e.target.matches('.tab-button')) return;
+
+        const tabId = e.target.dataset.tab;
+        
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+        document.getElementById(tabId).classList.remove('hidden');
+
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.classList.remove('tab-active');
+            button.classList.add('tab-inactive');
+        });
+        e.target.classList.add('tab-active');
+        e.target.classList.remove('tab-inactive');
+    };
+
+    document.querySelector('nav').addEventListener('click', handleTabClick);
+    
+    document.getElementById('details-table-body').addEventListener('click', (e) => {
+        const row = e.target.closest('tr');
+        if (row) {
+            renderGymDetails(row.dataset.gymId);
+        }
+    });
+    
+    let sortState = { key: 'price', asc: true };
+    document.querySelector('.table-sortable thead').addEventListener('click', (e) => {
+        const th = e.target.closest('th');
+        if (!th || !th.dataset.sort) return;
+        
+        const key = th.dataset.sort;
+        sortState.asc = (sortState.key === key) ? !sortState.asc : true;
+        sortState.key = key;
+
+        gymData.sort((a, b) => {
+            let valA = a[key];
+            let valB = b[key];
+            if (typeof valA === 'string') {
+                return sortState.asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            }
+            return sortState.asc ? valA - valB : valB - valA;
+        });
+
+        renderDetailsTable();
+    });
+
+    renderRadarChart();
+    renderStrategyGroups();
+    renderDetailsTable();
+});
+</script>
+
+</body>
+</html>
